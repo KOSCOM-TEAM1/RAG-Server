@@ -1,0 +1,22 @@
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+
+# Python
+__pycache__/
+venv/
+*.pyc
+*.pyo
+*.pyd
+
+# FAISS index and data files
+faiss_index/
+combined_news_list.json
+bigkinds_detailed_result.json
+
+# Environment
+.env

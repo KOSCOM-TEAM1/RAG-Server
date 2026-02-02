@@ -1,18 +1,29 @@
+# 0. 가장 먼저 환경 변수 설정 (중요!)
 import os
+os.environ['LC_ALL'] = 'C.UTF-8'
+os.environ['LANG'] = 'C.UTF-8'
+
+# .env 파일 로드
+from dotenv import load_dotenv
+load_dotenv()
+
+# --- 이제 나머지 라이브러리를 불러옵니다 ---
+import json
 from typing import List, Dict
 from fastapi import FastAPI
 from pydantic import BaseModel
-from dotenv import load_dotenv  # 추가됨
 
 # LangChain & OpenAI 관련
+import httpx
+from openai import OpenAI as OAIClient # 이름 충돌 방지
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
+from langchain_core.output_parsers import JsonOutputParser
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import Document
 
-# 1. 환경 설정 (반드시 최상단에서 실행)
-load_dotenv()
 
+# 1. FastAPI 앱 생성
 app = FastAPI()
 
 # 2. 산업군 종목 매핑
@@ -55,7 +66,23 @@ except (FileNotFoundError, json.JSONDecodeError) as e:
 if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY가 .env 파일에 없거나 로드되지 않았습니다.")
 
-embeddings = OpenAIEmbeddings()
+# 커스텀 httpx 클라이언트 생성 및 문제의 헤더 제거
+_custom_httpx_client = httpx.Client()
+_problematic_headers = [
+    "x-stainless-os", "x-stainless-arch", "x-stainless-runtime",
+    "x-stainless-runtime-version", "x-stainless-lang", "x-stainless-package-version"
+]
+for header_name in _problematic_headers:
+    if header_name in _custom_httpx_client.headers:
+        del _custom_httpx_client.headers[header_name]
+
+# 커스텀 httpx 클라이언트를 사용하는 OpenAI 클라이언트 생성
+_openai_client_with_custom_httpx = OAIClient(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    http_client=_custom_httpx_client
+)
+
+embeddings = OpenAIEmbeddings(client=_openai_client_with_custom_httpx.embeddings)
 index_path = "faiss_index"
 
 # FAISS 인덱스가 로컬에 저장되어 있는지 확인
@@ -110,7 +137,7 @@ else:
 retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
 
 # 4. LLM 설정
-llm = ChatOpenAI(model="gpt-4o-mini")
+llm = ChatOpenAI(model="gpt-4o-mini", client=_openai_client_with_custom_httpx.chat.completions)
 
 # 5. 통신 규격
 class NewsRequest(BaseModel):
@@ -118,6 +145,11 @@ class NewsRequest(BaseModel):
     content: str
     kospi_status: str
     nasdaq_status: str
+
+# 추가: LLM의 JSON 응답을 파싱하기 위한 Pydantic 모델
+class DecisionReport(BaseModel):
+    decision: str
+    reason: List[str]
 
 # 6. 엔드포인트
 @app.get("/")
@@ -128,12 +160,17 @@ def health_check():
 async def analyze_news(data: NewsRequest):
     related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
     
-    # B. RAG 검색 (최신 문법인 invoke 사용 권장)
+    # B. RAG 검색
     docs = retriever.invoke(data.content)
     past_context = "\n".join([doc.page_content for doc in docs])
     
+    # C. LLM 체인 구성
+    parser = JsonOutputParser(pydantic_object=DecisionReport)
+    
     template = """
     당신은 전문 주식 분석가입니다. 아래 데이터를 종합하여 투자 가이드를 제시하세요.
+
+    {format_instructions}
 
     [현재 분석 대상]
     - 종목명: {stock_name}
@@ -149,32 +186,33 @@ async def analyze_news(data: NewsRequest):
 
     위 내용을 바탕으로 해당 뉴스의 종목이 어떤 추세로 갈지 분석하여 
     [매수 / 매도 / 중립] 가이드를 결정하고 그 이유를 3줄 이내로 요약하세요.
-    
-    반드시 아래 JSON 형식으로 응답해주세요:
-    {{
-        "decision": "[매수/매도/중립]",
-        "reason": ["이유1", "이유2", "이유3"]
-    }}
     """
     
-    prompt = ChatPromptTemplate.from_template(template)
-    chain = prompt | llm
+    prompt = ChatPromptTemplate.from_template(
+        template,
+        partial_variables={"format_instructions": parser.get_format_instructions()}
+    )
     
-    response = chain.invoke({
-        "stock_name": data.stock_name,
-        "related_stocks": ", ".join(related_stocks),
-        "news_content": data.content,
-        "kospi": data.kospi_status,
-        "nasdaq": data.nasdaq_status,
-        "past_context": past_context
-    })
+    chain = prompt | llm | parser
     
-    # LLM 응답을 JSON으로 파싱
+    # D. 체인 실행
     try:
-        decision_report = json.loads(response.content)
-    except json.JSONDecodeError:
-        decision_report = {"decision": "파싱 오류", "reason": ["LLM 응답을 JSON으로 변환할 수 없습니다."]}
-    
+        decision_report = chain.invoke({
+            "stock_name": data.stock_name,
+            "related_stocks": ", ".join(related_stocks),
+            "news_content": data.content,
+            "kospi": data.kospi_status,
+            "nasdaq": data.nasdaq_status,
+            "past_context": past_context
+        })
+    except Exception as e:
+        # LLM 파싱 실패 또는 다른 오류 발생 시
+        print(f"LLM 체인 실행 중 오류 발생: {e}")
+        decision_report = {
+            "decision": "오류", 
+            "reason": ["LLM 응답을 처리하는 중 문제가 발생했습니다.", str(e)]
+        }
+
     return {
         "stock": data.stock_name,
         "decision_report": decision_report
