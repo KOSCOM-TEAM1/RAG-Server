@@ -27,15 +27,15 @@ INDUSTRY_MAP: Dict[str, List[str]] = {
 import json
 
 # JSON 파일 경로
-json_file_path = "combined_news_list.json"
+json_file_path = "bigkinds_detailed_result.json"
 
 # JSON 파일 읽기
 try:
     with open(json_file_path, 'r', encoding='utf-8') as f:
         news_data = json.load(f)
     
-    # 'content' 필드만 추출하여 past_news_data 리스트 생성
-    past_news_data = [item['content'] for item in news_data if 'content' in item]
+    # 'DETAIL' 필드만 추출하여 past_news_data 리스트 생성
+    past_news_data = [item['DETAIL'] for item in news_data if 'DETAIL' in item and item['DETAIL']]
     
     # 데이터가 비어있는 경우 예외 처리
     if not past_news_data:
@@ -100,9 +100,11 @@ async def analyze_news(data: NewsRequest):
     위 내용을 바탕으로 해당 뉴스의 종목이 어떤 추세로 갈지 분석하여 
     [매수 / 매도 / 중립] 가이드를 결정하고 그 이유를 3줄 이내로 요약하세요.
     
-    반드시 아래 형식을 유지하세요:
-    결정: [값]
-    이유: 1. ... 2. ...
+    반드시 아래 JSON 형식으로 응답해주세요:
+    {{
+        "decision": "[매수/매도/중립]",
+        "reason": ["이유1", "이유2", "이유3"]
+    }}
     """
     
     prompt = ChatPromptTemplate.from_template(template)
@@ -117,9 +119,15 @@ async def analyze_news(data: NewsRequest):
         "past_context": past_context
     })
     
+    # LLM 응답을 JSON으로 파싱
+    try:
+        decision_report = json.loads(response.content)
+    except json.JSONDecodeError:
+        decision_report = {"decision": "파싱 오류", "reason": ["LLM 응답을 JSON으로 변환할 수 없습니다."]}
+    
     return {
         "stock": data.stock_name,
-        "decision_report": response.content
+        "decision_report": decision_report
     }
 
 if __name__ == "__main__":
