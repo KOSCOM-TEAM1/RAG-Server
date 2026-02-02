@@ -3,3 +3,4 @@ __pycache__
 venv
 combined_news_list.json
 bigkinds_detailed_result.json
+faiss_index
