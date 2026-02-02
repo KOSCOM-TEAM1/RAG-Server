@@ -56,7 +56,57 @@ if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("OPENAI_API_KEY가 .env 파일에 없거나 로드되지 않았습니다.")
 
 embeddings = OpenAIEmbeddings()
-vectorstore = FAISS.from_texts(past_news_data, embeddings)
+index_path = "faiss_index"
+
+# FAISS 인덱스가 로컬에 저장되어 있는지 확인
+if os.path.exists(index_path):
+    # 1. 인덱스가 존재하면 로드
+    print(f"'{index_path}'에서 기존 인덱스를 로드합니다.")
+    vectorstore = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
+    print("인덱스 로드 완료.")
+else:
+    # 2. 인덱스가 없으면 새로 생성
+    print(f"'{index_path}'를 찾을 수 없습니다. 새로운 인덱스를 생성합니다.")
+    
+    # JSON 파일 경로
+    json_file_path = "bigkinds_detailed_result.json"
+
+    # JSON 파일 읽기
+    try:
+        with open(json_file_path, 'r', encoding='utf-8') as f:
+            news_data = json.load(f)
+        
+        # 'DETAIL' 필드만 추출하여 past_news_data 리스트 생성 (None 값 필터링)
+        past_news_data = [item['DETAIL'] for item in news_data if item.get('DETAIL')]
+        
+        if not past_news_data:
+            raise ValueError("JSON 파일에 유효한 뉴스 데이터가 없습니다.")
+
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        print(f"경고: {e}. 임시 정적 데이터를 사용합니다.")
+        past_news_data = [
+            "삼성전자, 반도체 수요 급증으로 분기 최대 실적 달성. 주가 급등 사례",
+            "미국 연준, 금리 인상 발표로 나스닥 지수 하락 및 기술주 약세",
+        ]
+
+    # FAISS 인덱스를 점진적으로 구축
+    if past_news_data:
+        initial_text = "초기화용 더미 텍스트"
+        vectorstore = FAISS.from_texts([initial_text], embeddings)
+        
+        chunk_size = 100
+        for i in range(0, len(past_news_data), chunk_size):
+            chunk = past_news_data[i:i + chunk_size]
+            vectorstore.add_texts(chunk)
+            print(f"인덱싱 진행: {i + len(chunk)} / {len(past_news_data)} 처리 완료")
+        
+        # 3. 생성된 인덱스를 로컬에 저장
+        print(f"새로운 인덱스를 '{index_path}'에 저장합니다.")
+        vectorstore.save_local(index_path)
+        print("인덱스 저장 완료.")
+    else:
+        vectorstore = FAISS.from_texts([], embeddings)
+
 retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
 
 # 4. LLM 설정
