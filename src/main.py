@@ -12,6 +12,7 @@ from langchain.prompts import ChatPromptTemplate
 from config import settings
 from rag_utils.embedding import create_vector_store_from_json
 from prompts import RAG_PROMPT_TEMPLATE, NO_RAG_PROMPT_TEMPLATE
+from market_data import get_market_data
 
 app = FastAPI()
 
@@ -24,19 +25,16 @@ INDUSTRY_MAP: Dict[str, List[str]] = {
     "엔비디아": ["AMD", "인텔", "마이크로소프트", "퀄컴"]
 }
 
-# 3. RAG 초기화 (설정 파일 사용)
-vectorstore = create_vector_store_from_json(settings.json_file_path)
-retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
+# 3. RAG 초기화 (설정 파일 사용) - 주석 처리
+# vectorstore = create_vector_store_from_json(settings.json_file_path)
 
-# 4. LLM 설정
-llm = ChatOpenAI(model="gpt-4o-mini")
+# 4. LLM 설정 - 주석 처리
+# llm = ChatOpenAI(model="gpt-4o-mini")
 
 # 5. 통신 규격
 class NewsRequest(BaseModel):
     stock_name: str
     content: str
-    kospi_status: str
-    nasdaq_status: str
 
 # 6. 엔드포인트
 @app.get("/")
@@ -47,30 +45,45 @@ def health_check():
 
 @app.post("/analyze")
 async def analyze_news(data: NewsRequest):
+    # Endpoint-level initialization
+    vectorstore = create_vector_store_from_json(settings.json_file_path)
+    llm = ChatOpenAI(model="gpt-4o-mini")
+
     related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
+    market_data = get_market_data()
     
-    # B. RAG 검색 (최신 문법인 invoke 사용 권장)
-    docs = retriever.invoke(data.content)
-    past_context = "\n".join([doc.page_content for doc in docs])
+    # RAG 검색 시 유사도 점수 포함
+    docs_with_scores = vectorstore.similarity_search_with_relevance_scores(
+        data.content, k=2
+    )
+    
+    # 컨텍스트와 응답용 데이터 분리
+    past_context = "\n".join(
+        [f"- {doc.page_content}" for doc, score in docs_with_scores]
+    )
+    referenced_cases = [
+        {"content": doc.page_content, "score": float(round(score, 4))} 
+        for doc, score in docs_with_scores
+    ]
     
     prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
     chain = prompt | llm
     
-    response = chain.invoke({
+    prompt_input = {
         "stock_name": data.stock_name,
         "related_stocks": ", ".join(related_stocks),
         "news_content": data.content,
-        "kospi": data.kospi_status,
-        "nasdaq": data.nasdaq_status,
-        "past_context": past_context
-    })
+        "past_context": past_context,
+        **market_data,
+    }
 
-    referenced_cases = [doc.page_content for doc in docs]
+    response = chain.invoke(prompt_input)
     
     return {
         "stock": data.stock_name,
         "decision_report": response.content,
-        "referenced_cases": referenced_cases
+        "referenced_cases": referenced_cases,
+        "market_data_used": market_data,
     }
     
     
@@ -78,23 +91,29 @@ async def analyze_news(data: NewsRequest):
 @app.post("/analyze/no-rag")
 async def analyze_news_no_rag(data: NewsRequest):
     """Analyzes news without using the RAG context."""
+    # Endpoint-level initialization
+    llm = ChatOpenAI(model="gpt-4o-mini")
+
     related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
-    
+    market_data = get_market_data()
+
     prompt = ChatPromptTemplate.from_template(NO_RAG_PROMPT_TEMPLATE)
     chain = prompt | llm
     
-    response = chain.invoke({
+    prompt_input = {
         "stock_name": data.stock_name,
         "related_stocks": ", ".join(related_stocks),
         "news_content": data.content,
-        "kospi": data.kospi_status,
-        "nasdaq": data.nasdaq_status,
-    })
+        **market_data,
+    }
+
+    response = chain.invoke(prompt_input)
     
     return {
         "stock": data.stock_name,
         "decision_report": response.content,
-        "referenced_cases": []  # RAG를 사용하지 않으므로 빈 리스트 반환
+        "referenced_cases": ["순수 LLM의 일반 지식으로만 분석"],  # RAG를 사용하지 않으므로 고정 메시지 반환
+        "market_data_used": market_data,
     }
 
 
