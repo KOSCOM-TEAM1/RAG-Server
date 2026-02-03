@@ -93,6 +93,50 @@ async def analyze_news(data: NewsRequest):
         "referenced_cases": referenced_cases
     }
 
+@app.post("/analyze/no-rag")
+async def analyze_news_no_rag(data: NewsRequest):
+    """Analyzes news without using the RAG context."""
+    related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
+    
+    # Template without the RAG context
+    template = """
+    당신은 전문 주식 분석가입니다. 아래 데이터를 종합하여 투자 가이드를 제시하세요.
+
+    [현재 분석 대상]
+    - 종목명: {stock_name}
+    - 관련 산업군 종목: {related_stocks}
+    - 뉴스 내용: {news_content}
+
+    [시장 거시 지표]
+    - KOSPI: {kospi}
+    - NASDAQ: {nasdaq}
+
+    위 내용을 바탕으로 해당 뉴스의 종목이 어떤 추세로 갈지 분석하여 
+    [매수 / 매도 / 중립] 가이드를 결정하고 그 이유를 3줄 이내로 요약하세요.
+    
+    반드시 아래 형식을 유지하세요:
+    결정: [값]
+    이유: 1. ... 2. ...
+    """
+    
+    prompt = ChatPromptTemplate.from_template(template)
+    chain = prompt | llm
+    
+    response = chain.invoke({
+        "stock_name": data.stock_name,
+        "related_stocks": ", ".join(related_stocks),
+        "news_content": data.content,
+        "kospi": data.kospi_status,
+        "nasdaq": data.nasdaq_status,
+    })
+    
+    return {
+        "stock": data.stock_name,
+        "decision_report": response.content,
+        "referenced_cases": []  # RAG를 사용하지 않으므로 빈 리스트 반환
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

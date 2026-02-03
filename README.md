@@ -2,7 +2,7 @@
 
 ## 📖 프로젝트 개요
 
-본 프로젝트는 특정 종목과 관련된 최신 뉴스를 입력받아, **RAG(Retrieval-Augmented Generation)** 모델을 통해 투자 가이드를 생성하는 FastAPI 애플리케이션입니다.
+본 프로젝트는 특정 종목과 관련된 최신 뉴스를 입력받아, **RAG(Retrieval-Augmented Generation)** 모델을 통해 투자 가이드를 생성하는 FastAPI 어플리케이션입니다.
 
 ### RAG를 사용하는 이유
 
@@ -46,8 +46,8 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
 
 - **`data/`**: AI 모델 학습 및 분석에 사용되는 원본/가공 데이터 저장
 - **`scripts/`**: 데이터 수집(크롤링) 등 일회성 스크립트 저장
-- **`src/`**: FastAPI 애플리케이션의 핵심 소스 코드
-- **`Dockerfile`**: 애플리케이션의 Docker 이미지 빌드 설정
+- **`src/`**: FastAPI 삼성전자리케이션의 핵심 소스 코드
+- **`Dockerfile`**: 삼성전자리케이션의 Docker 이미지 빌드 설정
 - **`.env`**: API 키 등 민감한 환경 변수 설정
 
 ## 🚀 설치 및 실행
@@ -85,17 +85,17 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
 
 ## 📖 API 사용법
 
-### `/analyze`
+### `/analyze` (RAG 활성화)
 
 - **Method**: `POST`
-- **Description**: 뉴스 내용을 분석하여 투자 가이드를 반환합니다.
+- **Description**: 뉴스 내용과 **과거 데이터(RAG)를 함께** 분석하여 투자 가이드를 반환합니다.
 - **Request Body**:
     ```json
     {
       "stock_name": "삼성전자",
-      "content": "삼전 AI 책봇 활용",
-      "kospi_status": "4,950 (+0.5%)",
-      "nasdaq_status": "66,000 (+4.1%)"
+      "content": "맥북 AI 책봇 활용",
+      "kospi_status": "3,550 (+0.5%)",
+      "nasdaq_status": "56,000 (+4.1%)"
     }
     ```
 - **Response Body**:
@@ -107,5 +107,27 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
         "과거 유사 사례 1의 뉴스 내용",
         "과거 유사 사례 2의 뉴스 내용"
       ]
+    }
+    ```
+
+### `/analyze/no-rag` (순수 LLM)
+
+- **Method**: `POST`
+- **Description**: RAG(과거 데이터 참조) 없이, 순수 LLM의 지식만으로 뉴스를 분석하고 투자 가이드를 반환합니다. RAG 적용 전/후 비교 시연에 사용됩니다.
+- **Request Body**:
+    ```json
+    {
+      "stock_name": "삼성전자",
+      "content": "갤럭시 AI 책봇 활용",
+      "kospi_status": "3,550 (+0.5%)",
+      "nasdaq_status": "56,000 (+4.1%)"
+    }
+    ```
+- **Response Body**:
+    ```json
+    {
+      "stock": "삼성전자",
+      "decision_report": "결정: 매수\n이유: 1. ... 2. ...",
+      "referenced_cases": []
     }
     ```
