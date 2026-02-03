@@ -1,7 +1,6 @@
 # 1. 기본 이미지 설정
-FROM python:3.8-slim
+FROM python:3.9-slim
 
-# 2. 환경 변수 설정 (중요: UnicodeEncodeError 방지)
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 

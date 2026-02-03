@@ -3,8 +3,8 @@ import requests
 import time
 
 # 1. 원본 파일 로드
-input_file = "combined_news_list.json"
-output_file = "bigkinds_detailed_result.json"
+input_file = "../data/combined_news_list.json"
+output_file = "../data/bigkinds_detailed_result.json"
 
 try:
     with open(input_file, 'r', encoding='utf-8') as f:

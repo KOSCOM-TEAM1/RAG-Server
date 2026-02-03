@@ -2,17 +2,15 @@ import os
 from typing import List, Dict
 from fastapi import FastAPI
 from pydantic import BaseModel
-from dotenv import load_dotenv  
 
 # LangChain & OpenAI 관련
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain.prompts import ChatPromptTemplate
 
-from rag_utils.embedding import create_vector_store_from_json
-
-# 1. 환경 설정 (반드시 최상단에서 실행)
-load_dotenv()
+# Refactored imports
+from .config import settings
+from .rag_utils.embedding import create_vector_store_from_json
 
 app = FastAPI()
 
@@ -25,14 +23,9 @@ INDUSTRY_MAP: Dict[str, List[str]] = {
     "엔비디아": ["AMD", "인텔", "마이크로소프트", "퀄컴"]
 }
 
-# 3. RAG 초기화
-JSON_FILE_PATH = "bigkinds_detailed_result.json"
-vectorstore = create_vector_store_from_json(JSON_FILE_PATH)
+# 3. RAG 초기화 (설정 파일 사용)
+vectorstore = create_vector_store_from_json(settings.json_file_path)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 2})
-
-# API 키 확인 절차 (디버깅용)
-if not os.getenv("OPENAI_API_KEY"):
-    raise ValueError("OPENAI_API_KEY가 .env 파일에 없거나 로드되지 않았습니다.")
 
 # 4. LLM 설정
 llm = ChatOpenAI(model="gpt-4o-mini")
