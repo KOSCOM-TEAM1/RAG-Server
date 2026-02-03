@@ -2,7 +2,7 @@
 
 ## 📖 프로젝트 개요
 
-본 프로젝트는 특정 종목과 관련된 최신 뉴스를 입력받아, **RAG(Retrieval-Augmented Generation)** 모델을 통해 투자 가이드를 생성하는 FastAPI 어플리케이션입니다.
+본 프로젝트는 특정 종목과 관련된 최신 뉴스를 입력받아, **RAG(Retrieval-Augmented Generation)** 모델을 통해 투자 가이드를 생성하는 FastAPI 애플리케이션입니다.
 
 ### RAG를 사용하는 이유
 
@@ -33,6 +33,7 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
 ├── src/ 
 │   ├── config.py
 │   ├── main.py
+│   ├── prompts.py
 │   └── rag_utils/ 
 │       ├── embedding.py
 │       └── __init__.py
@@ -46,8 +47,8 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
 
 - **`data/`**: AI 모델 학습 및 분석에 사용되는 원본/가공 데이터 저장
 - **`scripts/`**: 데이터 수집(크롤링) 등 일회성 스크립트 저장
-- **`src/`**: FastAPI 삼성전자리케이션의 핵심 소스 코드
-- **`Dockerfile`**: 삼성전자리케이션의 Docker 이미지 빌드 설정
+- **`src/`**: FastAPI 애플리케이션의 핵심 소스 코드
+- **`Dockerfile`**: 애플리케이션의 Docker 이미지 빌드 설정
 - **`.env`**: API 키 등 민감한 환경 변수 설정
 
 ## 🚀 설치 및 실행
@@ -93,7 +94,7 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
     ```json
     {
       "stock_name": "삼성전자",
-      "content": "맥북 AI 책봇 활용",
+      "content": "갤럭시 AI 책봇 활용",
       "kospi_status": "3,550 (+0.5%)",
       "nasdaq_status": "56,000 (+4.1%)"
     }

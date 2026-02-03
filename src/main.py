@@ -11,6 +11,7 @@ from langchain.prompts import ChatPromptTemplate
 # Refactored imports
 from config import settings
 from rag_utils.embedding import create_vector_store_from_json
+from prompts import RAG_PROMPT_TEMPLATE, NO_RAG_PROMPT_TEMPLATE
 
 app = FastAPI()
 
@@ -19,7 +20,7 @@ INDUSTRY_MAP: Dict[str, List[str]] = {
     "삼성전자": ["SK하이닉스", "한미반도체", "DB하이텍"],
     "에코프로": ["포스코홀딩스", "엘앤에프", "LG에너지솔루션"],
     "현대차": ["기아", "현대모비스", "현대위아"],
-    "NAVER": ["카카오", "크래프톤", "엔씨소프트"], 
+    "NAVER": ["카카오", "크래프톤", "엔씨소프트"],
     "엔비디아": ["AMD", "인텔", "마이크로소프트", "퀄컴"]
 }
 
@@ -42,6 +43,8 @@ class NewsRequest(BaseModel):
 def health_check():
     return {"status": "RAG Server is Running"}
 
+
+
 @app.post("/analyze")
 async def analyze_news(data: NewsRequest):
     related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
@@ -50,30 +53,7 @@ async def analyze_news(data: NewsRequest):
     docs = retriever.invoke(data.content)
     past_context = "\n".join([doc.page_content for doc in docs])
     
-    template = """
-    당신은 전문 주식 분석가입니다. 아래 데이터를 종합하여 투자 가이드를 제시하세요.
-
-    [현재 분석 대상]
-    - 종목명: {stock_name}
-    - 관련 산업군 종목: {related_stocks}
-    - 뉴스 내용: {news_content}
-
-    [시장 거시 지표]
-    - KOSPI: {kospi}
-    - NASDAQ: {nasdaq}
-
-    [참고할 과거 유사 사례 및 추세]
-    {past_context}
-
-    위 내용을 바탕으로 해당 뉴스의 종목이 어떤 추세로 갈지 분석하여 
-    [매수 / 매도 / 중립] 가이드를 결정하고 그 이유를 3줄 이내로 요약하세요.
-    
-    반드시 아래 형식을 유지하세요:
-    결정: [값]
-    이유: 1. ... 2. ...
-    """
-    
-    prompt = ChatPromptTemplate.from_template(template)
+    prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
     chain = prompt | llm
     
     response = chain.invoke({
@@ -92,34 +72,15 @@ async def analyze_news(data: NewsRequest):
         "decision_report": response.content,
         "referenced_cases": referenced_cases
     }
+    
+    
 
 @app.post("/analyze/no-rag")
 async def analyze_news_no_rag(data: NewsRequest):
     """Analyzes news without using the RAG context."""
     related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
     
-    # Template without the RAG context
-    template = """
-    당신은 전문 주식 분석가입니다. 아래 데이터를 종합하여 투자 가이드를 제시하세요.
-
-    [현재 분석 대상]
-    - 종목명: {stock_name}
-    - 관련 산업군 종목: {related_stocks}
-    - 뉴스 내용: {news_content}
-
-    [시장 거시 지표]
-    - KOSPI: {kospi}
-    - NASDAQ: {nasdaq}
-
-    위 내용을 바탕으로 해당 뉴스의 종목이 어떤 추세로 갈지 분석하여 
-    [매수 / 매도 / 중립] 가이드를 결정하고 그 이유를 3줄 이내로 요약하세요.
-    
-    반드시 아래 형식을 유지하세요:
-    결정: [값]
-    이유: 1. ... 2. ...
-    """
-    
-    prompt = ChatPromptTemplate.from_template(template)
+    prompt = ChatPromptTemplate.from_template(NO_RAG_PROMPT_TEMPLATE)
     chain = prompt | llm
     
     response = chain.invoke({
