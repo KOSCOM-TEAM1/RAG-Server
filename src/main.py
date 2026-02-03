@@ -9,8 +9,8 @@ from langchain_community.vectorstores import FAISS
 from langchain.prompts import ChatPromptTemplate
 
 # Refactored imports
-from .config import settings
-from .rag_utils.embedding import create_vector_store_from_json
+from config import settings
+from rag_utils.embedding import create_vector_store_from_json
 
 app = FastAPI()
 

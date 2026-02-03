@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 5. 애플리케이션 코드 복사
-COPY . .
+COPY src/ .
 
 # 6. 포트 노출
 EXPOSE 8000
