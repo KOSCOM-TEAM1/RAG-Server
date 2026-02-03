@@ -101,7 +101,7 @@ LLM이 가진 일반적인 지식에 로컬 데이터를 참조하는 능력을 
 - **Response Body**:
     ```json
     {
-      "stock": "삼전",
+      "stock": "삼성전자",
       "decision_report": "결정: 매수\n이유: 1. ... 2. ...",
       "referenced_cases": [
         "과거 유사 사례 1의 뉴스 내용",
