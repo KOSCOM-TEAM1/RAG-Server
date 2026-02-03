@@ -1,16 +1,17 @@
 import os
-from typing import List, Dict
-from fastapi import FastAPI
+from typing import List, Dict, Optional
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 # LangChain & OpenAI 관련
 from langchain_openai import ChatOpenAI
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS # Not directly used for retriever, but for type hinting if needed
 from langchain.prompts import ChatPromptTemplate
+from langchain.retrievers import EnsembleRetriever # Imported for type hinting/clarity
 
 # Refactored imports
 from config import settings
-from rag_utils.embedding import create_vector_store_from_json
+from rag_utils.embedding import create_hybrid_retriever # Changed import
 from prompts import RAG_PROMPT_TEMPLATE, NO_RAG_PROMPT_TEMPLATE
 from market_data import get_market_data
 
@@ -46,24 +47,26 @@ def health_check():
 @app.post("/analyze")
 async def analyze_news(data: NewsRequest):
     # Endpoint-level initialization
-    vectorstore = create_vector_store_from_json(settings.json_file_path)
+    ensemble_retriever: Optional[EnsembleRetriever] = create_hybrid_retriever(settings.json_file_path)
+    if ensemble_retriever is None:
+        raise HTTPException(status_code=500, detail="Failed to initialize RAG retriever. Check data file or API key.")
+    
     llm = ChatOpenAI(model="gpt-4o-mini")
 
     related_stocks = INDUSTRY_MAP.get(data.stock_name, ["해당 산업군 전반"])
     market_data = get_market_data()
     
-    # RAG 검색 시 유사도 점수 포함
-    docs_with_scores = vectorstore.similarity_search_with_relevance_scores(
-        data.content, k=2
-    )
+    # RAG 검색 (하이브리드 검색기 사용)
+    retrieved_docs = ensemble_retriever.get_relevant_documents(data.content)
     
-    # 컨텍스트와 응답용 데이터 분리
+    # 컨텍스트 추출
     past_context = "\n".join(
-        [f"- {doc.page_content}" for doc, score in docs_with_scores]
+        [f"- {doc.page_content}" for doc in retrieved_docs]
     )
+    # referenced_cases는 이제 score 없이 content만 포함
     referenced_cases = [
-        {"content": doc.page_content, "score": float(round(score, 4))} 
-        for doc, score in docs_with_scores
+        {"content": doc.page_content} 
+        for doc in retrieved_docs
     ]
     
     prompt = ChatPromptTemplate.from_template(RAG_PROMPT_TEMPLATE)
